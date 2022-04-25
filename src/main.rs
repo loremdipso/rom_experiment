@@ -84,6 +84,10 @@ enum Action {
 		/// How many files to test
 		#[clap(long, default_value_t = 1)]
 		num_files_to_test: usize,
+
+		/// How many files to test
+		#[clap(long)]
+		do_not_shuffle: bool,
 	},
 }
 
@@ -130,18 +134,22 @@ fn main() -> Result<()> {
 		Action::Test {
 			num_iterations,
 			num_files_to_test,
-		} => test(&options, num_iterations, num_files_to_test),
+			do_not_shuffle,
+		} => test(&options, num_iterations, num_files_to_test, do_not_shuffle),
 	}
 }
 
-fn test(options: &Opt, num_iterations: usize, num_files_to_test: usize) -> Result<()> {
+fn test(
+	options: &Opt,
+	num_iterations: usize,
+	num_files_to_test: usize,
+	do_not_shuffle: bool,
+) -> Result<()> {
 	let folder_path = get_folder_path(&options.test_folder);
 	let archive_path = get_archive_path(&options.test_folder);
 	let manifest_path = get_manifest_path(&options.test_folder);
 
 	let manifest = get_manifest(&manifest_path)?;
-
-	let mut archive_file = File::open(archive_path)?;
 
 	let entry = &manifest[0];
 	info!("Testing {}", &entry.path);
@@ -156,7 +164,9 @@ fn test(options: &Opt, num_iterations: usize, num_files_to_test: usize) -> Resul
 	let mut rng = rand::thread_rng(); // TODO: probably we shouldn't make a new rng per file, but w/e
 
 	let mut indexes = (0..manifest.len()).collect::<Vec<usize>>();
-	indexes.shuffle(&mut rng);
+	if !do_not_shuffle {
+		indexes.shuffle(&mut rng);
+	}
 
 	let mut disk_hash: u8;
 	let mut archive_hash: u8;
@@ -165,6 +175,9 @@ fn test(options: &Opt, num_iterations: usize, num_files_to_test: usize) -> Resul
 	let mut total_archive_time: Duration = Duration::new(0, 0);
 	let mut count = 0;
 	for i in 0..num_iterations {
+		// open the archive on each iteration
+		let mut archive_file = File::open(&archive_path)?;
+
 		for index in &indexes[..num_files_to_test] {
 			let index = rng.gen_range(0..manifest.len());
 
